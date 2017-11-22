@@ -125,7 +125,12 @@ const Extension = sequelize.define('extension', {
     classMethods: {
       // relations between models are declared in `.classMethods.associate`.
       associate: function(models) {
-        // no associations for this model so nothing here
+        Extension.hasMany(
+          models.Channel,
+          {
+            as: 'Channels',
+            foreignKey: { allowNull: false },
+          });
       }
     }
   }

@@ -13,10 +13,12 @@
 
 // Any time you create a new model for an app, import it here
 const {Extension} = require('./extension')
+const {Channel} = require('./channel')
 
 // All models you want to expose to other modules should go here
 const db = {
-	Extension
+  Extension,
+  Channel
 }
 
 Object.keys(db).forEach(function(modelName) {

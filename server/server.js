@@ -7,7 +7,7 @@ const request = require('request')
 const rp = require('request-promise-native')
 const cronJob = require('cron').CronJob
 
-const {Extension} = require('./models')
+const {Extension, Channel} = require('../models')
 
 const app = express()
  
@@ -61,8 +61,8 @@ function getAllExtensions() {
 
 async function createReleasedExtensions () {
   try {
-    const a = await getAllExtensions()
-    const released = a.filter(ext => ext.state === `Released`)
+    const extensions = await getAllExtensions()
+    const released = extensions.filter(ext => ext.state === `Released`)
     const replaceIdWithTwitchExtId = released.map(ext => {
       ext.twitch_ext_id = ext.id
       delete ext.id
@@ -71,7 +71,7 @@ async function createReleasedExtensions () {
     let createCount = 0
     for (let i = 0; i < replaceIdWithTwitchExtId.length; i++) {
       const el = replaceIdWithTwitchExtId[i]
-      Extension.create(el,{logging: false})
+      Extension.create(el,{logging: sqlLog, benchmark: true})
       .then(_ => {
         createCount++
         if (i === replaceIdWithTwitchExtId.length - 1) {
@@ -85,14 +85,55 @@ async function createReleasedExtensions () {
   }
 }
 
-const dailyEventText = new cronJob('0 * * * *', () => {
-  // check for games (currently only NBA)
+function sqlLog(_,benchmark) {
+  console.log(benchmark)
+}
+
+function getLiveChannels(twitch_ext_id, qs) {
+  let options = {
+    method: 'GET',
+    url: `https://api.twitch.tv/extensions/${twitch_ext_id}/live_activated_channels`,
+    headers: {
+      'content-type': 'application/json',
+      'client-id': twitch_ext_id
+    }
+  }
+  return rp(options).then(data => {
+    // save data
+    let parsed = JSON.parse(data)
+    let channels = parsed.channels
+    const replaceIdWithTwitchChannelId = channels.map(channel => {
+      channel.twitch_id = channel.id
+      delete channel.id
+      return channel
+    })
+    Channel.bulkCreate(replaceIdWithTwitchChannelId, {logging: false, benchmark: true})
+    .catch(err => console.log(err))
+    if (data.cursor) {
+      // settimeout to make sure we do not surpass rate limit
+      setTimeout(() => {
+        getLiveChannels(twitch_ext_id, `?cursor=${data.cursor}`)
+      }, 1000);
+    }
+  }).catch(e => console.log(e))
+}
+
+const hourlyExtensionUpdate = new cronJob('0 * * * *', (t) => {
   createReleasedExtensions()
+  
 }, null, true, 'America/Los_Angeles')
 
-createReleasedExtensions()
-
-// TODO: to then filter the extensions by ones that have the key/val {"state": "Released"}
+const biHourlyChannelsUpdate = new cronJob('0,30 * * * *', (t) => {
+  // get all from extensions table
+  Extension.findAll()
+  .then(extensions => {
+    let et = extensions.map(ext => getLiveChannels(ext.twitch_ext_id, ''))
+    Promise.all(et).catch(err => console.log(err))
+  })
+  // for each active channel get chatters list
+  
+}, null, true, 'America/Los_Angeles')
+// createReleasedExtensions()
 
 const port = process.env.PORT || 3000
 app.listen(port, console.log(`listening on port ${port}`))
