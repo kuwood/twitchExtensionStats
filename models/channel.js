@@ -30,6 +30,13 @@ const Channel = sequelize.define('channel', {
       type: Sequelize.TEXT,
       allowNull: false
     },
+    extension_id: {
+      type: Sequelize.INTEGER,
+      references: {
+        model: "extensions",
+        key: "id"
+      }
+    }
   }, {
     // we explicitly tell Sequelize that this model is based
     // on a table called 'extension' instead of having Sequelize

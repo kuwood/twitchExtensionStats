@@ -86,13 +86,14 @@ async function createReleasedExtensions () {
 }
 
 function sqlLog(_,benchmark) {
-  console.log(benchmark)
+  console.log(`${benchmark} MS`)
 }
 
-function getLiveChannels(twitch_ext_id, qs) {
+function getLiveChannels(twitch_ext_id, ext_id, qs) {
+  console.log('calling', twitch_ext_id, qs ? `with cursor ${qs}` : '')
   let options = {
     method: 'GET',
-    url: `https://api.twitch.tv/extensions/${twitch_ext_id}/live_activated_channels`,
+    url: `https://api.twitch.tv/extensions/${twitch_ext_id}/live_activated_channels${qs}`,
     headers: {
       'content-type': 'application/json',
       'client-id': twitch_ext_id
@@ -107,33 +108,41 @@ function getLiveChannels(twitch_ext_id, qs) {
       delete channel.id
       return channel
     })
-    Channel.bulkCreate(replaceIdWithTwitchChannelId, {logging: false, benchmark: true})
-    .catch(err => console.log(err))
-    if (data.cursor) {
+    const addExtensionRelation = replaceIdWithTwitchChannelId.map(channel => {
+      channel.extension_id = ext_id
+      return channel
+    })
+    
+    Channel.bulkCreate(addExtensionRelation, {logging: false, benchmark: false})
+    .catch(err => console.log('bulk create err', err, 'bulk create err'))
+    if (parsed.cursor && ext_id === 1) {
       // settimeout to make sure we do not surpass rate limit
       setTimeout(() => {
-        getLiveChannels(twitch_ext_id, `?cursor=${data.cursor}`)
+        // FIX THIS: calling multiple times for each extension with same cursor
+        getLiveChannels(twitch_ext_id, ext_id, `?cursor=${parsed.cursor}`)
       }, 1000);
     }
-  }).catch(e => console.log(e))
+  }).catch(err => console.log('getLiveChannels error', err.message, err.options.url, 'getLiveChannels err'))
 }
 
-const hourlyExtensionUpdate = new cronJob('0 * * * *', (t) => {
+const hourlyExtensionUpdate = new cronJob('0 * * * *', () => {
   createReleasedExtensions()
-  
 }, null, true, 'America/Los_Angeles')
 
-const biHourlyChannelsUpdate = new cronJob('0,30 * * * *', (t) => {
+const biHourlyChannelsUpdate = new cronJob('0,30 * * * *', () => {
   // get all from extensions table
-  Extension.findAll()
+  Extension.findAll({logging: false})
   .then(extensions => {
-    let et = extensions.map(ext => getLiveChannels(ext.twitch_ext_id, ''))
-    Promise.all(et).catch(err => console.log(err))
-  })
+    for (let i = 0; i < extensions.length; i++) {
+      const ext = extensions[i]
+      setTimeout(() => {
+        getLiveChannels(ext.twitch_ext_id, ext.id, '')
+      }, 1000 * (i + 1));
+    }
+  }).catch(err => console.log('fnd all', err, 'fnd all'))
   // for each active channel get chatters list
   
 }, null, true, 'America/Los_Angeles')
-// createReleasedExtensions()
 
 const port = process.env.PORT || 3000
 app.listen(port, console.log(`listening on port ${port}`))

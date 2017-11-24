@@ -130,7 +130,8 @@ const Extension = sequelize.define('extension', {
           {
             as: 'Channels',
             foreignKey: { allowNull: false },
-          });
+          }
+        )
       }
     }
   }
