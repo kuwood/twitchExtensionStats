@@ -116,10 +116,9 @@ function getLiveChannels(twitch_ext_id, ext_id, qs) {
     
     Channel.bulkCreate(addExtensionRelation, {logging: false, benchmark: false})
     .catch(err => console.log('bulk create err', err, 'bulk create err'))
-    if (parsed.cursor && ext_id === 1) {
+    if (parsed.cursor) {
       // settimeout to make sure we do not surpass rate limit
       setTimeout(() => {
-        // FIX THIS: calling multiple times for each extension with same cursor
         getLiveChannels(twitch_ext_id, ext_id, `?cursor=${parsed.cursor}`)
       }, 1000);
     }
