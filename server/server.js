@@ -6,6 +6,7 @@ const bodyParser = require('body-parser')
 const request = require('request')
 const rp = require('request-promise-native')
 const cronJob = require('cron').CronJob
+const {sequelize} = require('../db/sequelize')
 
 const {Extension, Channel} = require('../models')
 
@@ -131,7 +132,11 @@ const hourlyExtensionUpdate = new cronJob('0 * * * *', () => {
 
 const biHourlyChannelsUpdate = new cronJob('0,30 * * * *', () => {
   // get all from extensions table
-  Extension.findAll({logging: false})
+  sequelize.query(
+    `SELECT * FROM extensions
+    WHERE created_at BETWEEN now() - interval '1' HOUR AND now()`,
+    {type: sequelize.QueryTypes.SELECT}
+  )
   .then(extensions => {
     for (let i = 0; i < extensions.length; i++) {
       const ext = extensions[i]
